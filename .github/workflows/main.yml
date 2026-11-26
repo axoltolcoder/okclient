@@ -1,0 +1,58 @@
+name: Build mod jar
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.8
+
+      - name: Build
+        run: gradle build --no-daemon
+
+      - name: Collect jar and check contents
+        run: |
+          mkdir -p dist
+          for f in build/libs/*.jar; do
+            case "$f" in *-sources.jar) ;; *) cp "$f" dist/ ;; esac
+          done
+          ls -la dist
+          JAR=$(ls dist/*.jar | head -n1)
+          echo "Checking $JAR"
+          unzip -l "$JAR" | grep -E "fabric.mod.json|ClickGuiScreen|ACTestClient|en_us.json"
+          unzip -l "$JAR" | grep -q "fabric.mod.json"
+          unzip -l "$JAR" | grep -q "ClickGuiScreen"
+          unzip -l "$JAR" | grep -q "assets/actest/lang/en_us.json"
+
+      - name: Upload jar as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: actest-jar
+          path: dist/*.jar
+
+      - name: Publish release with jar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: AC Test build ${{ github.run_number }}
+          body: Download the .jar below and put it in .minecraft/mods with Fabric API.
+          files: dist/*.jar
